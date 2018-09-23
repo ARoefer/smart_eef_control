@@ -1,0 +1,6 @@
+<launch>
+    <node pkg="smart_eef_control" type="run_server.sh" name="web_server" output="screen" cwd="node"/>
+    <include file="$(find rosbridge_server)/launch/rosbridge_websocket.launch">
+        <arg name="port" value="9097"/>
+    </include>
+</launch>

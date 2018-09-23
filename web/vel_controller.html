@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Endeffector Control</title>
+    <link href="https://fonts.googleapis.com/css?family=Roboto" rel="stylesheet">
+    <link rel="stylesheet" type="text/css" href="style.css">
+    <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+    <script type="text/javascript" src="https://static.robotwebtools.org/roslibjs/current/roslib.js"></script>
+    <script type="text/javascript" src="nipplejs/dist/nipplejs.min.js"></script>
+    <script type="text/javascript" src="accel_tracker.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#222">
+</head>
+<body>
+  <div id="banner" class="banner">
+    <h1>Endeffector Control</h1>
+  </div>
+      <table>
+        <tr>
+          <td>
+            <div id="controlMode" class="controlMode">
+              <div id="btnXY" class="mode-btn" onclick="selectMode(this.id, 'XY')">XY</div>
+              <div id="btnXZ" class="mode-btn" onclick="selectMode(this.id, 'XZ')">XZ</div>
+              <div id="btnYZ" class="mode-btn" onclick="selectMode(this.id, 'YZ')">YZ</div>  
+            </div>
+          </td>
+          <td>
+            <div id="joystickArea" class="joystickArea"> 
+            </div>
+          </td>
+        </tr>
+      </table>
+    </div>
+    <div class="slidecontainer">
+      <h3>Sensitivity</h3>
+      <input type="range" min="1" max="10" value="7" class="slider" id="linScale">
+    </div>
+
+    <div>
+      <div id="btnLocal" class="frame-btn" onclick="selectNavMode(this.id, 'local')">Local Motion</div>
+      <div id="btnGlobal" class="frame-btn" onclick="selectNavMode(this.id, 'global')">Global Motion</div>
+    </div>
+    <select id="eefList" onchange="eefChanged()" style="display: none">
+    </select>
+    <div class="controls">
+
+  <div id="statusIndicator">
+    <p id="connecting" class="statusDisplay connecting">
+      Connecting to rosbridge...
+    </p>
+    <div id="connected" class="statusDisplay connected" style="display:none">
+      <p>Connected to ROS</p>
+    </div>
+    <p id="error" class="statusDisplay error" style="display:none">
+      Error in the backend!
+    </p>
+    <p id="closed" class="statusDisplay closed" style="display:none">
+      Connection to ROS closed.
+    </p>
+    <p class="errorDisplay" class="statusDisplay" style="display:none;"></p>
+  </div>
+</body>
+<script type="text/javascript">selectMode('btnXY', 'XY');
+</script>
+<script type="text/javascript">selectNavMode('btnGlobal', 'global');
+</script>
+</html>

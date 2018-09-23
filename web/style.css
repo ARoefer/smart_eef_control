@@ -1,0 +1,183 @@
+
+html {
+  font-family: 'Roboto', sans-serif;
+  background-color: #222;
+  -webkit-user-select: none; /* Safari */        
+  -moz-user-select: none; /* Firefox */
+  -ms-user-select: none; /* IE10+/Edge */
+  user-select: none; /* Standard */
+}
+
+body {
+    margin: 0;
+}
+
+
+h1, h2, h3 {
+    margin: 0px;
+    text-align: center;
+    color: #fff;
+}
+
+.banner {
+  padding: 12px 20px;
+}
+
+#statusIndicator {
+    position: fixed;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    /*padding: 0px;
+    margin: 0px;*/
+    background-color: #12387D;
+    color: #eee;
+}
+
+.statusDisplay {
+    margin: 0px;
+    padding: 4px;
+    text-align: center;
+}
+
+.statusDisplay p {
+  margin: 0px;
+}
+
+.connecting {
+    background-color: #da0;
+}
+
+.connected {
+    background-color: #282;
+}
+
+.error {
+    background-color: #e22; 
+    color: black;  
+}
+
+.closed {
+    background-color: #444;
+}
+
+label {
+    width: 15%;
+    float: left;
+    text-align: right;
+    padding: 5px;
+}
+
+select {
+  padding: 5px;
+  margin: 12px 10% 12px 10%;
+  display: inline-block;
+  border: none;
+  background: #ccc; 
+  width: 80%; 
+}
+
+.deadman {
+  margin: auto;
+  background-color: #e22;
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  color: white;
+  width: 200px;
+  height: 200px;
+  border-radius: 100px;
+  user-select: none;
+}
+
+.deadman-pressed {
+  background-color: #282;
+}
+
+.controlMode {
+  width: 20%;
+  margin: auto 0px;
+  max-height: 180px;
+}
+
+.joystickArea {
+  position: relative;
+  width: 80%;
+  margin: 0px;
+}
+
+.mode-btn {
+  color: #444;
+  background-color: #ccc;
+  width: 50px;
+  height: 50px;
+  border-radius: 25px;
+  text-align: center;
+  line-height: 50px;
+  margin: 0px 10px 10px 10px;
+}
+
+.frame-btn {
+  color: #444;
+  background-color: #ccc;
+  width: 150px;
+  height: 35px;
+  border-radius: 25px;
+  text-align: center;
+  line-height: 35px;
+  margin: 20px 10px 10px 10px;
+  float: left;
+}
+
+.btn-selected {
+  color: #fff;
+  background-color: #37d;
+}
+
+.slidecontainer {
+  text-align: center;
+  padding: 0px 20px;
+}
+
+.slidecontainer h3 {
+  text-decoration: none;
+  margin: 5px;
+  font-weight: normal;
+}
+
+.slider {
+  -webkit-appearance: none;  /* Override default CSS styles */
+  appearance: none;
+  margin: 0px auto;
+  width: 90%; /* Full-width */
+  height: 10px; /* Specified height */
+  background: #d3d3d3; /* Grey background */
+  outline: none; /* Remove outline */
+  -webkit-transition: .2s; /* 0.2 seconds transition on hover */
+  transition: opacity .2s;
+  border-radius: 5px;
+}
+
+/* Mouse-over effects */
+.slider:hover {
+    opacity: 1; /* Fully shown on mouse-over */
+}
+
+/* The slider handle (use -webkit- (Chrome, Opera, Safari, Edge) and -moz- (Firefox) to override default look) */ 
+.slider::-webkit-slider-thumb {
+    -webkit-appearance: none; /* Override default look */
+    appearance: none;
+    width: 15px; /* Set a specific slider handle width */
+    height: 25px; /* Slider handle height */
+    background: #282; /* Green background */
+    cursor: pointer; /* Cursor on hover */
+    border-radius: 7.5px;
+}
+
+.slider::-moz-range-thumb {
+    width: 15px; /* Set a specific slider handle width */
+    height: 25px; /* Slider handle height */
+    background: #282; /* Green background */
+    cursor: pointer; /* Cursor on hover */
+}

@@ -1,0 +1,5 @@
+geometry_msgs/Vector3 linear_input
+geometry_msgs/Vector3 angular_input
+float32 linear_scale
+bool global_command
+string controlled_id

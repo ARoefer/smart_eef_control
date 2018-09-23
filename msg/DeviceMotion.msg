@@ -1,0 +1,3 @@
+geometry_msgs/Vector3 linear_accel
+geometry_msgs/Vector3 rotation_rate
+geometry_msgs/Vector3 orientation

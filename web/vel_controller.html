@@ -2,7 +2,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Endeffector Control</title>
+    <title>Cartesian Control</title>
     <link href="https://fonts.googleapis.com/css?family=Roboto" rel="stylesheet">
     <link rel="stylesheet" type="text/css" href="style.css">
     <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
@@ -10,12 +10,17 @@
     <script type="text/javascript" src="nipplejs/dist/nipplejs.min.js"></script>
     <script type="text/javascript" src="accel_tracker.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+
+    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.3.1/css/solid.css" integrity="sha384-VGP9aw4WtGH/uPAOseYxZ+Vz/vaTb1ehm1bwx92Fm8dTrE+3boLfF1SpAtB1z7HW" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.3.1/css/regular.css" integrity="sha384-ZlNfXjxAqKFWCwMwQFGhmMh3i89dWDnaFU2/VZg9CvsMGA7hXHQsPIqS+JIAmgEq" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.3.1/css/fontawesome.css" integrity="sha384-1rquJLNOM3ijoueaaeS5m+McXPJCGdr5HcA03/VHXxcp2kX2sUrQDmFc3jR5i/C7" crossorigin="anonymous">
     <meta name="theme-color" content="#222">
 </head>
 <body>
   <div id="banner" class="banner">
-    <h1>Endeffector Control</h1>
+    <h1>Cartesian Control</h1>
   </div>
+  <div class="controls">
       <table>
         <tr>
           <td>
@@ -32,19 +37,14 @@
         </tr>
       </table>
     </div>
-    <div class="slidecontainer">
-      <h3>Sensitivity</h3>
-      <input type="range" min="1" max="10" value="7" class="slider" id="linScale">
-    </div>
 
-    <div>
-      <div id="btnLocal" class="frame-btn" onclick="selectNavMode(this.id, 'local')">Local Motion</div>
-      <div id="btnGlobal" class="frame-btn" onclick="selectNavMode(this.id, 'global')">Global Motion</div>
-    </div>
-    <select id="eefList" onchange="eefChanged()" style="display: none">
-    </select>
-    <div class="controls">
+  <div>
+    <div id="btnlocal" class="frame-btn" onclick="selectCoordMode(this.id, 'local')">Local Motion</div>
+    <div id="btnglobal" class="frame-btn" onclick="selectCoordMode(this.id, 'global')">Global Motion</div>
+    <div id="btnrelative" class="frame-btn" onclick="selectCoordMode(this.id, 'relative')">Relative Motion</div>
+  </div>
 
+  
   <div id="statusIndicator">
     <p id="connecting" class="statusDisplay connecting">
       Connecting to rosbridge...
@@ -60,9 +60,72 @@
     </p>
     <p class="errorDisplay" class="statusDisplay" style="display:none;"></p>
   </div>
+
+  <div id="btnSettings" onclick="onMenuBtnClicked(this)">
+    <div class="bar1"></div>
+    <div class="bar2"></div>
+    <div class="bar3"></div>
+  </div>
+
+
+  <div id="settingsMenu" class="overlay">
+    <div class="overlay-content">
+      <h2>Settings</h2>
+      <table>
+        <tr class="eefRelated" style="display: none">
+          <td><h3>Controlled Link</h3></td>
+          <td><select id="eefList" onchange="eefChanged()"></select></td>
+        </tr>
+        <tr>
+        <td><h3>Sensitivity</h3></td>
+        <td><div class="slidecontainer">
+          <input type="range" min="1" max="10" value="7" class="slider" id="linScale" onchange="sensitivityChanged()">
+        </div></td>
+        </tr>
+        <tr>
+          <td><h3>Deadzone</h3></td>
+          <td>
+            <div class="slidecontainer">
+              <input type="range" min="1" max="9" value="7" class="slider" id="deadzoneScale">
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td><h3>Control Position</h3></td>
+          <td><label class="switch">
+              <input id="ckPos" type="checkbox" onclick="setControlPosition(this.checked)"><span class="checkmark"></span>
+              </label>
+          </td> 
+        </tr>
+        <tr>
+          <td><h3>Control Rotation</h3></td>
+          <td><label class="switch">
+              <input id="ckRot" type="checkbox" onclick="setControlRotation(this.checked)"><span class="checkmark"></span>
+              </label>
+          </td> 
+        </tr>
+        <tr id="calibrationRow">
+          <td><h3>Localization</h3></td>
+          <td><button id="btnStartCali" onclick="showCalibration(true)">Recalibrate</button></td>
+        </tr>
+      </table>
+      <div id="calibrationAnimation">
+        <p>Align your phone with the robot's forwards direction</p>
+        <table>
+          <tr>
+          <td><div id="animatedRobot"><i class="fas fa-location-arrow"></i></div></td>
+          <td><div id="animatedPhone"><i class="fas fa-mobile"></i></div></td>
+          </tr>
+        </table>
+        <button id="btnCaliCancel" onclick="showCalibration(false)">Cancel</button>
+        <button id="btnCaliDone" onclick="calibrate();showCalibration(false);">Done</button>
+      </div>
+    </div>
+    </div>
+  </div>
 </body>
-<script type="text/javascript">selectMode('btnXY', 'XY');
-</script>
-<script type="text/javascript">selectNavMode('btnGlobal', 'global');
+<script type="text/javascript">
+  selectMode('btnXY', 'XY');
+  selectCoordMode('btnglobal', 'global');
 </script>
 </html>

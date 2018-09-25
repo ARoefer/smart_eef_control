@@ -11,11 +11,24 @@ var lin_input    = {x: 0.0, y: 0.0, z: 0.0};
 var device_ori   = {x: 0.0, y: 0.0, z: 0.0};
 var ori_zero     = {x: 0.0, y: 0.0, z: 0.0};
 var linear_slider = null;
-var globalFrame = true;
-var controlled_eef = null;
-
 var njs_manager = null;
+var current_robot = null;
+
+// Robot settings
+var controlled_eef = null;
+var robot_forward = 0.0;
+var calibrated = false;
+var controller_yaw = 0.0;
+
+// EEF settings
+var coordMode = true;
 var controlMode = 'XY';
+var deadzone = 0.2
+var sensitivity = 1.0;
+var controlPosition = true;
+var controlRotation = true;
+
+var serverIp = window.location.href.substring(7, window.location.href.lastIndexOf(':'));
 
 $(function() {
   var deadmanWidth = window.innerWidth * 0.6;
@@ -26,6 +39,8 @@ $(function() {
   ja.style.height = ja.offsetWidth + 'px';
   cm.style.width  = window.innerWidth * 0.2 + 'px';
   cm.style.height = ja.offsetWidth + 'px';
+
+  connectToROS();
 
   njs_manager = nipplejs.create({
     zone: document.getElementById('joystickArea'),
@@ -58,7 +73,7 @@ $(function() {
       x = 0.0;
       y = 0.0;
     } else {
-      s = (Math.min(1.0, data.force) - 0.1) / 0.9;
+      s = (Math.min(1.0, data.force) - deadzone) / (1.0 - deadzone);
       x = Math.cos(data.angle.radian) * s;
       y = Math.sin(data.angle.radian) * s;
     }
@@ -89,14 +104,24 @@ $(function() {
 var capture_data = false;
 
 function sendMotion() {
-  var cmd = new ROSLIB.Message({
-      linear_input:  {x: lin_input.x, y: lin_input.y, z: lin_input.z},
-      angular_input: {x: device_ori.x - ori_zero.x, 
+  var final_lin_input = {x: 0.0, y: 0.0, z: 0.0};
+  if (controlPosition)
+    final_lin_input = {x: lin_input.x, y: lin_input.y, z: lin_input.z};
+
+  var final_ang_input = {x: 0.0, y: 0.0, z: 0.0};
+  if (controlRotation) {
+    final_ang_input = {x: device_ori.x - ori_zero.x, 
                       y: device_ori.y - ori_zero.y,
-                      z: device_ori.z - ori_zero.z},
-      linear_scale: linear_slider.value / linear_slider.max,
-      controlled_id: controlled_eef,
-      global_command: globalFrame
+                      z: device_ori.z - ori_zero.z};
+  }
+
+  var cmd = new ROSLIB.Message({
+      linear_input:   final_lin_input,
+      angular_input:  final_ang_input,
+      controller_yaw: ori_zero.z - robot_forward, 
+      linear_scale:   sensitivity,
+      controlled_id:  controlled_eef,
+      command_type: coordMode
   });
 
   motionTopic.publish(cmd);
@@ -116,18 +141,28 @@ ros.on('connection', function() {
   console.log('Connection made!');
   $('.statusDisplay').hide();
   document.getElementById('connected').style.display = 'block';
+  showCalibration(true);
 
   var get_eefs_request = new ROSLIB.ServiceRequest({});
   srv_get_eefs.callService(get_eefs_request, function(res) {
+    current_robot  = res.robot;
+    var eef_to_select = localStorage.getItem('{}:eef'.format(current_robot));
+    var sel_index = 0;
+
     var list = document.getElementById('eefList');
     if (res.endeffectors.length > 1) {
-      list.style.display = 'block';
+      $('.eefRelated').show();
       for (x in res.endeffectors) {
         list.add(new Option(res.endeffectors[x], res.endeffectors[x], false, false));
+        if (res.endeffectors[x] == eef_to_select)
+          sel_index = x;
       }
-      list.selectedIndex = 0;
+      list.selectedIndex = sel_index;
+    } else {
+      $('.eefRelated').hide();
     }
-    controlled_eef = res.endeffectors[0];
+    controlled_eef = res.endeffectors[sel_index];
+    loadEEFSettings(current_robot, controlled_eef);
   });
 });
 ros.on('close', function() {
@@ -137,10 +172,9 @@ ros.on('close', function() {
 });
 // Create a connection to the rosbridge WebSocket server.
 
-var serverIp = window.location.href.substring(7, window.location.href.lastIndexOf(':'));
-
-
-ros.connect('ws://{}:9097'.format(serverIp));
+function connectToROS() {
+  ros.connect('ws://{}:9097'.format(serverIp));
+}
 
 var motionTopic = new ROSLIB.Topic({
     ros : ros,
@@ -158,12 +192,18 @@ function selectMode(id, mode) {
   $('.mode-btn').removeClass('btn-selected');
   $('#' + id).addClass('btn-selected');
   controlMode = mode;
+  localStorage.setItem('{}:{}:controlMode'.format(current_robot, controlled_eef), controlMode);
 }
 
-function selectNavMode(id, mode) {
+function selectCoordMode(id, mode) {
   $('.frame-btn').removeClass('btn-selected');
   $('#' + id).addClass('btn-selected');
-  globalFrame = mode == 'global';
+  coordMode = mode;
+  localStorage.setItem('{}:{}:coordMode'.format(current_robot, controlled_eef), coordMode);
+  if (coordMode == 'relative' && !calibrated) {
+    onMenuBtnClicked(document.getElementById('btnSettings'));
+    showCalibration(true);
+  }
 }
 
 function changeThemeColor(color) {
@@ -174,4 +214,73 @@ function changeThemeColor(color) {
 function eefChanged() {
   var list = document.getElementById('eefList');
   controlled_eef = list.options[list.selectedIndex].value
+  localStorage.setItem('{}:eef'.format(current_robot), controlled_eef);
+  loadEEFSettings(current_robot, controlled_eef);
+}
+
+function sensitivityChanged() {
+  sensitivity = linear_slider.value / linear_slider.max;
+  localStorage.setItem('{}:{}:sensitivity'.format(current_robot, controlled_eef), sensitivity);
+}
+
+function boolFromLS(key, defVal) {
+  var strVal = localStorage.getItem(key);
+  if (strVal)
+    return strVal == 'true';
+  else
+    return defVal;
+}
+
+function loadEEFSettings(robot, eef) {
+  coordMode   = localStorage.getItem('{}:{}:coordMode'.format(robot, eef)) || coordMode;
+  controlMode = localStorage.getItem('{}:{}:controlMode'.format(robot, eef)) || controlMode;
+  deadzone    = parseFloat(localStorage.getItem('{}:{}:deadzone'.format(robot, eef))) || deadzone;
+  sensitivity = parseFloat(localStorage.getItem('{}:{}:sensitivity'.format(robot, eef))) || sensitivity;
+  controlPosition = boolFromLS('{}:{}:controlPosition'.format(robot, eef), controlPosition);
+  controlRotation = boolFromLS('{}:{}:controlRotation'.format(robot, eef), controlRotation);
+
+  $('#ckPos').prop('checked', controlPosition);
+  $('#ckRot').prop('checked', controlRotation);
+
+  selectMode('btn' + controlMode, controlMode);
+  selectCoordMode('btn' + coordMode, coordMode);
+
+  linear_slider.value = sensitivity * linear_slider.max;
+}
+
+function onMenuBtnClicked(x) {
+  var menu = document.getElementById('settingsMenu');
+  if (menu.style.height != '100%') {
+    x.classList.add("change");
+    menu.style.height = '100%';
+  } else {
+    x.classList.remove("change");
+    menu.style.height = '0%';
+  }
+}
+
+function setControlPosition(state) {
+  controlPosition = state;
+  localStorage.setItem('{}:{}:controlPosition'.format(current_robot, controlled_eef), controlPosition);
+}
+
+function setControlRotation(state) {
+  controlRotation = state;
+  localStorage.setItem('{}:{}:controlRotation'.format(current_robot, controlled_eef), controlRotation);
+}
+
+function showCalibration(show) {
+  if (calibrated) {
+    $('#btnCaliCancel').show();
+  } else {
+    $('#btnCaliCancel').hide();
+  }
+
+  $('#calibrationRow').toggle(!show);
+  $('#calibrationAnimation').toggle(show);
+}
+
+function calibrate() {
+  robot_forward = device_ori.z;
+  calibrated = true;
 }

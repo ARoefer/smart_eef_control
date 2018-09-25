@@ -7,7 +7,7 @@ from control_msgs.msg import GripperCommandActionGoal as GCAGMsg
 
 from giskardpy.symengine_robot import Robot
 from giskardpy.symengine_controller import SymEngineController
-from giskardpy.symengine_wrappers import pos_of, rot_of, axis_angle_from_matrix, rotation3_axis_angle, rpy_from_matrix, vector3
+from giskardpy.symengine_wrappers import pos_of, rot_of, axis_angle_from_matrix, rotation3_axis_angle, rpy_from_matrix, vector3, eye, diag, rotation3_rpy
 from giskardpy.input_system import Vector3Input, RPYInput
 from giskardpy.qp_problem_builder import SoftConstraint as SC
 
@@ -30,15 +30,15 @@ def symbol_formatter(symbol_name):
     return sp.Symbol(symbol_name.replace('/', '__'))
 
 
-def rotation3_rpy(r, p, y):
-    """ Conversion of roll, pitch, yaw to 4x4 rotation matrix according to:
-        https://github.com/orocos/orocos_kinematics_dynamics/blob/master/orocos_kdl/src/frames.cpp#L167
-    """
-    # TODO don't split this into 3 matrices
+# def rotation3_rpy(r, p, y):
+#     """ Conversion of roll, pitch, yaw to 4x4 rotation matrix according to:
+#         https://github.com/orocos/orocos_kinematics_dynamics/blob/master/orocos_kdl/src/frames.cpp#L167
+#     """
+#     # TODO don't split this into 3 matrices
 
-    return np.array([[np.cos(p)*np.cos(y), -np.sin(y)*np.cos(r) + np.sin(p)*np.sin(r)*np.cos(y), np.sin(r)*np.sin(y) + np.sin(p)*np.cos(r)*np.cos(y)],
-            [np.sin(y)*np.cos(p), np.cos(r)*np.cos(y) + np.sin(p)*np.sin(r)*np.sin(y), -np.sin(r)*np.cos(y) + np.sin(p)*np.sin(y)*np.cos(r)],
-            [-np.sin(p), np.sin(r)*np.cos(p), np.cos(r)*np.cos(p)]])
+#     return np.array([[np.cos(p)*np.cos(y), -np.sin(y)*np.cos(r) + np.sin(p)*np.sin(r)*np.cos(y), np.sin(r)*np.sin(y) + np.sin(p)*np.cos(r)*np.cos(y)],
+#             [np.sin(y)*np.cos(p), np.cos(r)*np.cos(y) + np.sin(p)*np.sin(r)*np.sin(y), -np.sin(r)*np.cos(y) + np.sin(p)*np.sin(y)*np.cos(r)],
+#             [-np.sin(p), np.sin(r)*np.cos(p), np.cos(r)*np.cos(p)]])
 
 def rpy_from_matrix(matrix):
     sy = math.sqrt(matrix[0, 0] * matrix[0, 0] + matrix[1, 0] * matrix[1, 0])
@@ -48,50 +48,26 @@ def rpy_from_matrix(matrix):
     y = math.atan2(matrix[1, 0], matrix[0, 0])
 
     return r, p, y
-
-def real_quat_from_matrix(frame):
-    tr = frame[0,0] + frame[1,1] + frame[2,2]
-
-    if tr > 0: 
-        S = math.sqrt(tr+1.0) * 2 # S=4*qw 
-        qw = 0.25 * S
-        qx = (frame[2,1] - frame[1,2]) / S
-        qy = (frame[0,2] - frame[2,0]) / S 
-        qz = (frame[1,0] - frame[0,1]) / S 
-    elif frame[0,0] > frame[1,1] and frame[0,0] > frame[2,2]: 
-        S  = math.sqrt(1.0 + frame[0,0] - frame[1,1] - frame[2,2]) * 2 # S=4*qx 
-        qw = (frame[2,1] - frame[1,2]) / S
-        qx = 0.25 * S
-        qy = (frame[0,1] + frame[1,0]) / S 
-        qz = (frame[0,2] + frame[2,0]) / S 
-    elif frame[1,1] > frame[2,2]: 
-        S  = math.sqrt(1.0 + frame[1,1] - frame[0,0] - frame[2,2]) * 2 # S=4*qy
-        qw = (frame[0,2] - frame[2,0]) / S
-        qx = (frame[0,1] + frame[1,0]) / S 
-        qy = 0.25 * S
-        qz = (frame[1,2] + frame[2,1]) / S 
-    else: 
-        S  = math.sqrt(1.0 + frame[2,2] - frame[0,0] - frame[1,1]) * 2 # S=4*qz
-        qw = (frame[1,0] - frame[0,1]) / S
-        qx = (frame[0,2] + frame[2,0]) / S
-        qy = (frame[1,2] + frame[2,1]) / S
-        qz = 0.25 * S
-    return (qx, qy, qz, qw)
+    
 
 class Endeffector(object):
-    def __init__(self, robot, link, reference_frame, vel_limit=0.6, gripper_topic=None):
+    def __init__(self, robot, link, reference_frame, vel_limit=0.6, symmetry=None, gripper_topic=None):
         self.link = link
         self.fk_frame = robot.get_fk_expression(reference_frame, link)
         self.vel_limit = vel_limit
         self.pub_gcmd = rospy.Publisher(gripper_topic, GCAGMsg, queue_size=1, tcp_nodelay=True) if gripper_topic != None else None
         self.last_command = None
-        self.current_rpy  = np.zeros(3)
+        self.current_rpy  = vector3(0,0,0)
         self.current_lin_vel = vector3(0,0,0)
         self.global_command  = False 
+        self.symmetry = symmetry
+        self.command_transform = eye(4)
+        self.controller_transform = eye(4)
 
     def generate_constraints(self):
-        self.input_lin_vel  = Vector3Input.prefix(symbol_formatter, '{}_lin_vel'.format(self.link))
-        self.input_rot_goal   = RPYInput.prefix_constructor(symbol_formatter, '{}_rot_goal'.format(self.link))
+        self.input_lin_vel   = Vector3Input.prefix(symbol_formatter, '{}_lin_vel'.format(self.link))
+        self.input_rot_goal  = RPYInput.prefix_constructor(symbol_formatter, '{}_rot_goal'.format(self.link))
+        self.input_rot_trans = RPYInput.prefix_constructor(symbol_formatter, '{}_rot_trans'.format(self.link))
         self.input_rot_offset = RPYInput.prefix_constructor(symbol_formatter, '{}_rot_offset'.format(self.link))
 
         soft_constraints = {'{}_vel_{}'.format(self.link, x): SC(self.input_lin_vel.get_expression()[x],
@@ -100,6 +76,8 @@ class Endeffector(object):
                                                        pos_of(self.fk_frame)[x]) for x in range(3)}
 
         self.goal_rotation = self.input_rot_offset.get_expression() * self.input_rot_goal.get_expression()
+                             #self.input_rot_trans.get_expression()  * \
+                             
         axis, angle = axis_angle_from_matrix((rot_of(self.fk_frame).T * self.goal_rotation))
         r_rot_control = axis * angle
 
@@ -122,21 +100,42 @@ class Endeffector(object):
                                                   expression=c_aa[2])
         return soft_constraints
 
-    def process_input(self, subs, lx, ly, lz, ax, ay, az, scale=1.0, global_command=False):
+    def process_input(self, subs, lx, ly, lz, ax, ay, az, oy, scale=1.0, command_type='global'):
         now = rospy.Time.now()
 
         if self.last_command == None:
             rotation_matrix = self.fk_frame.subs(subs)
-            
             r, p, y = rpy_from_matrix(rotation_matrix)
             subs[self.input_rot_offset.r] = r
             subs[self.input_rot_offset.p] = p
             subs[self.input_rot_offset.y] = y
+            
+            if self.symmetry == 'xz' and rotation_matrix[2,2] < 0:
+                self.command_transform = diag(1, -1, -1, 1)
+            else:
+                self.command_transform = eye(4)
+
+            if command_type == 'relative':
+                self.controller_transform = rotation3_rpy(0,0, oy)
+                # r2, p2, y2 = rpy_from_matrix(rotation_matrix.T * self.controller_transform)
+                # subs[self.input_rot_trans.r] = r2
+                # subs[self.input_rot_trans.p] = p2
+                # subs[self.input_rot_trans.y] = y2
+            # elif command_type == 'global':
+            #     r2, p2, y2 = rpy_from_matrix(rotation_matrix.T)
+            #     subs[self.input_rot_trans.r] = r2
+            #     subs[self.input_rot_trans.p] = p2
+            #     subs[self.input_rot_trans.y] = y2
+            else:
+                self.controller_transform = eye(4)
+                # subs[self.input_rot_trans.r] = 0
+                # subs[self.input_rot_trans.p] = 0
+                # subs[self.input_rot_trans.y] = 0
 
         self.last_command    = now
-        self.global_command  = global_command
-        self.current_rpy     = np.array([ax, ay, az])
-        self.current_lin_vel = vector3(lx, ly,  lz) * self.vel_limit * scale
+        self.command_type    = command_type
+        self.current_rpy     = self.command_transform * vector3(ax, ay, az)
+        self.current_lin_vel = self.controller_transform * vector3(lx, ly,  lz) * self.vel_limit * scale
 
     def update_subs(self, subs):
         if self.last_command != None:
@@ -148,10 +147,10 @@ class Endeffector(object):
                 self.stop_motion(subs)
                 return True
 
-            if self.global_command:
+            if self.command_type == 'global' or self.command_type == 'relative':
                 transformed_vel = self.current_lin_vel
             else:
-                transformed_vel = rotation * self.current_lin_vel
+                transformed_vel = rotation * self.command_transform * self.current_lin_vel
 
             subs[self.input_lin_vel.x] = transformed_vel[0]
             subs[self.input_lin_vel.y] = transformed_vel[1]
@@ -167,8 +166,11 @@ class Endeffector(object):
         subs[self.input_rot_offset.r] = r
         subs[self.input_rot_offset.p] = p
         subs[self.input_rot_offset.y] = y
+        # subs[self.input_rot_trans.r] = 0
+        # subs[self.input_rot_trans.p] = 0
+        # subs[self.input_rot_trans.y] = 0
         self.current_lin_vel = vector3(0,0,0)
-        self.current_rpy = np.zeros(3)
+        self.current_rpy = vector3(0,0,0)
         subs[self.input_lin_vel.x]  = 0
         subs[self.input_lin_vel.y]  = 0
         subs[self.input_lin_vel.z]  = 0
@@ -181,7 +183,8 @@ class Endeffector(object):
         link = init_dict['link']
         vel_limit = init_dict['velocity_limit'] if 'velocity_limit' in init_dict else 0.6
         gripper_topic = init_dict['gripper_topic'] if 'gripper_topic' in init_dict else None
-        return cls(robot, link, base_frame, vel_limit, gripper_topic)
+        symmetry = init_dict['symmetry'] if 'symmetry' in init_dict else None
+        return cls(robot, link, base_frame, vel_limit, symmetry, gripper_topic)
 
 
 class ControlNode(object):
@@ -189,7 +192,6 @@ class ControlNode(object):
         self.robot = robot
         self.controller = BCControllerWrapper(self.robot)
         self.pub_cmd = rospy.Publisher('commands', JointStateMsg, queue_size=1, tcp_nodelay=True)
-        self.pub_remote_pose = rospy.Publisher('remote_pose', PoseStampedMsg, queue_size=1, tcp_nodelay=True)
 
         self.eefs = {e.link: e for e in eefs}
         self.global_command = False
@@ -215,16 +217,16 @@ class ControlNode(object):
                 e.stop_motion(self.controller.current_subs)
             self.initialized = True
 
-        self.current_eef.update_subs(self.controller.current_subs)
-        cmd = self.controller.get_cmd()
-        cmd_msg = JointStateMsg()
-        cmd_msg.header.stamp = rospy.Time.now()
-        cmd_msg.effort = [0] * len(cmd.items())
-        cmd_msg.position = [0] * len(cmd.items())
-        for j, v in cmd.items():
-            cmd_msg.name.append(j)
-            cmd_msg.velocity.append(v)
-        self.pub_cmd.publish(cmd_msg)
+        if self.current_eef.update_subs(self.controller.current_subs):
+            cmd = self.controller.get_cmd()
+            cmd_msg = JointStateMsg()
+            cmd_msg.header.stamp = rospy.Time.now()
+            cmd_msg.effort = [0] * len(cmd.items())
+            cmd_msg.position = [0] * len(cmd.items())
+            for j, v in cmd.items():
+                cmd_msg.name.append(j)
+                cmd_msg.velocity.append(v)
+            self.pub_cmd.publish(cmd_msg)
 
     def cb_device_motion(self, msg):
         if self.initialized:
@@ -241,8 +243,9 @@ class ControlNode(object):
                                            msg.angular_input.x * deg2rad, 
                                            msg.angular_input.y * deg2rad, 
                                            msg.angular_input.z * deg2rad,
+                                           msg.controller_yaw * deg2rad,
                                            msg.linear_scale,
-                                           msg.global_command)
+                                           msg.command_type)
 
     def stop(self):
         self.sub_dm.unregister()
@@ -250,6 +253,7 @@ class ControlNode(object):
 
     def srv_get_endeffectors(self, req):
         res = GetEndeffectorsResponse()
+        res.robot = self.robot._urdf_robot.name
         res.endeffectors = self.eefs.keys()
         return res
 

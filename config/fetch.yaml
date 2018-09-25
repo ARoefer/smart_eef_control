@@ -2,6 +2,7 @@ reference_frame: base_link
 end_effectors:
 - link: gripper_link
   velocity_limit: 0.6
+  symmetry: xz
   gripper_topic: /blabla_gripper
 - link: head_camera_link
   velocity_limit: 0.2

@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
 cd web
-python -m SimpleHTTPServer 8000
+python -m SimpleHTTPServer ${1-8000}

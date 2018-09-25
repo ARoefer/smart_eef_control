@@ -1,0 +1,4 @@
+- git: 
+    local-name: giskardpy
+    uri: https://github.com/ARoefer/giskardpy.git
+    version: gebsyas

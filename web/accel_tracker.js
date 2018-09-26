@@ -11,6 +11,7 @@ var lin_input    = {x: 0.0, y: 0.0, z: 0.0};
 var device_ori   = {x: 0.0, y: 0.0, z: 0.0};
 var ori_zero     = {x: 0.0, y: 0.0, z: 0.0};
 var linear_slider = null;
+var deadzone_slider = null;
 var njs_manager = null;
 var current_robot = null;
 
@@ -35,6 +36,7 @@ $(function() {
   var ja = document.getElementById('joystickArea');
   var cm = document.getElementById('controlMode');
   linear_slider = document.getElementById('linScale');
+  deadzone_slider = document.getElementById('deadzoneScale');
   ja.style.width  = window.innerWidth * 0.8 + 'px';
   ja.style.height = ja.offsetWidth + 'px';
   cm.style.width  = window.innerWidth * 0.2 + 'px';
@@ -223,6 +225,11 @@ function sensitivityChanged() {
   localStorage.setItem('{}:{}:sensitivity'.format(current_robot, controlled_eef), sensitivity);
 }
 
+function deadzoneChanged() {
+  deadzone = deadzone_slider.value / deadzone_slider.max;
+  localStorage.setItem('deadzone', deadzone);
+}
+
 function boolFromLS(key, defVal) {
   var strVal = localStorage.getItem(key);
   if (strVal)
@@ -232,9 +239,9 @@ function boolFromLS(key, defVal) {
 }
 
 function loadEEFSettings(robot, eef) {
+  deadzone    = parseFloat(localStorage.getItem('deadzone')) || deadzone;
   coordMode   = localStorage.getItem('{}:{}:coordMode'.format(robot, eef)) || coordMode;
   controlMode = localStorage.getItem('{}:{}:controlMode'.format(robot, eef)) || controlMode;
-  deadzone    = parseFloat(localStorage.getItem('{}:{}:deadzone'.format(robot, eef))) || deadzone;
   sensitivity = parseFloat(localStorage.getItem('{}:{}:sensitivity'.format(robot, eef))) || sensitivity;
   controlPosition = boolFromLS('{}:{}:controlPosition'.format(robot, eef), controlPosition);
   controlRotation = boolFromLS('{}:{}:controlRotation'.format(robot, eef), controlRotation);
@@ -246,6 +253,7 @@ function loadEEFSettings(robot, eef) {
   selectCoordMode('btn' + coordMode, coordMode);
 
   linear_slider.value = sensitivity * linear_slider.max;
+  deadzone_slider.value = deadzone * deadzone_slider.max;
 }
 
 function onMenuBtnClicked(x) {

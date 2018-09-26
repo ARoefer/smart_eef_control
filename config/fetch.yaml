@@ -1,5 +1,5 @@
 reference_frame: base_link
-end_effectors:
+links:
 - link: gripper_link
   velocity_limit: 0.6
   symmetry: xz

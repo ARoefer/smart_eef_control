@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package format="2">
   <name>smart_eef_control</name>
-  <version>Alpha 1.0</version>
+  <version>0.1.0</version>
   <description>The smart_eef_control package</description>
 
   <!-- One maintainer tag required, multiple allowed, one person per tag -->

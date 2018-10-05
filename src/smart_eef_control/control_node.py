@@ -48,7 +48,7 @@ def rpy_from_matrix(matrix):
     y = math.atan2(matrix[1, 0], matrix[0, 0])
 
     return r, p, y
-    
+
 
 class Endeffector(object):
     def __init__(self, robot, link, reference_frame, vel_limit=0.6, symmetry=None, gripper_topic=None):
@@ -61,22 +61,19 @@ class Endeffector(object):
         self.current_lin_vel = vector3(0,0,0)
         self.global_command  = False 
         self.symmetry = symmetry
-        self.command_transform = eye(4)
-        self.controller_transform = eye(4)
 
     def generate_constraints(self):
-        self.input_lin_vel   = Vector3Input.prefix(symbol_formatter, '{}_lin_vel'.format(self.link))
-        self.input_rot_goal  = RPYInput.prefix_constructor(symbol_formatter, '{}_rot_goal'.format(self.link))
-        self.input_rot_trans = RPYInput.prefix_constructor(symbol_formatter, '{}_rot_trans'.format(self.link))
+        self.input_lin_vel    = Vector3Input.prefix(symbol_formatter, '{}_lin_vel'.format(self.link))
+        self.input_rot_goal   = RPYInput.prefix_constructor(symbol_formatter, '{}_rot_goal'.format(self.link))
+        self.input_iframe     = RPYInput.prefix_constructor(symbol_formatter, '{}_iframe'.format(self.link))
         self.input_rot_offset = RPYInput.prefix_constructor(symbol_formatter, '{}_rot_offset'.format(self.link))
 
-        soft_constraints = {'{}_vel_{}'.format(self.link, x): SC(self.input_lin_vel.get_expression()[x],
-                                                       self.input_lin_vel.get_expression()[x],
+        soft_constraints = {'{}_vel_{}'.format(self.link, x): SC(self.input_iframe.get_expression() * self.input_lin_vel.get_expression()[x],
+                                                       self.input_iframe.get_expression() * self.input_lin_vel.get_expression()[x],
                                                        1,
                                                        pos_of(self.fk_frame)[x]) for x in range(3)}
 
-        self.goal_rotation = self.input_rot_offset.get_expression() * self.input_rot_goal.get_expression()
-                             #self.input_rot_trans.get_expression()  * \
+        self.goal_rotation = self.input_iframe.get_expression() * self.input_rot_goal.get_expression() * self.input_rot_offset.get_expression()
                              
         axis, angle = axis_angle_from_matrix((rot_of(self.fk_frame).T * self.goal_rotation))
         r_rot_control = axis * angle
@@ -106,36 +103,40 @@ class Endeffector(object):
         if self.last_command == None:
             rotation_matrix = self.fk_frame.subs(subs)
             r, p, y = rpy_from_matrix(rotation_matrix)
+            if command_type == 'relative':
+                iframe = rotation3_rpy(0,0, oy)
+                subs[self.input_iframe.r] = 0
+                subs[self.input_iframe.p] = 0
+                subs[self.input_iframe.y] = oy
+            elif command_type == 'global':
+                iframe = eye(4)
+                subs[self.input_iframe.r] = 0
+                subs[self.input_iframe.p] = 0
+                subs[self.input_iframe.y] = 0
+            else:
+                iframe = rotation_matrix
+                if self.symmetry == 'xz' and rotation_matrix[2,2] < 0:
+                    iframe = rotation3_rpy(math.pi, 0, 0) * iframe
+                r, p, y = rpy_from_matrix(iframe)
+                subs[self.input_iframe.r] = r
+                subs[self.input_iframe.p] = p
+                subs[self.input_iframe.y] = y
+            
+            r, p, y = rpy_from_matrix(iframe.T * rotation_matrix)
             subs[self.input_rot_offset.r] = r
             subs[self.input_rot_offset.p] = p
             subs[self.input_rot_offset.y] = y
-            
-            if self.symmetry == 'xz' and rotation_matrix[2,2] < 0:
-                self.command_transform = diag(1, -1, -1, 1)
-            else:
-                self.command_transform = eye(4)
-
-            if command_type == 'relative':
-                self.controller_transform = rotation3_rpy(0,0, oy)
-                # r2, p2, y2 = rpy_from_matrix(rotation_matrix.T * self.controller_transform)
-                # subs[self.input_rot_trans.r] = r2
-                # subs[self.input_rot_trans.p] = p2
-                # subs[self.input_rot_trans.y] = y2
-            # elif command_type == 'global':
-            #     r2, p2, y2 = rpy_from_matrix(rotation_matrix.T)
-            #     subs[self.input_rot_trans.r] = r2
-            #     subs[self.input_rot_trans.p] = p2
-            #     subs[self.input_rot_trans.y] = y2
-            else:
-                self.controller_transform = eye(4)
-                # subs[self.input_rot_trans.r] = 0
-                # subs[self.input_rot_trans.p] = 0
-                # subs[self.input_rot_trans.y] = 0
 
         self.last_command    = now
         self.command_type    = command_type
-        self.current_rpy     = self.command_transform * vector3(ax, ay, az)
-        self.current_lin_vel = self.controller_transform * vector3(lx, ly,  lz) * self.vel_limit * scale
+        self.current_rpy     = vector3(ax, ay, az)
+        self.current_lin_vel = vector3(lx, ly,  lz) * self.vel_limit * scale
+        subs[self.input_lin_vel.x] = self.current_lin_vel[0]
+        subs[self.input_lin_vel.y] = self.current_lin_vel[1]
+        subs[self.input_lin_vel.z] = self.current_lin_vel[2]
+        subs[self.input_rot_goal.r] = self.current_rpy[0]
+        subs[self.input_rot_goal.p] = self.current_rpy[1]
+        subs[self.input_rot_goal.y] = self.current_rpy[2]
 
     def update_subs(self, subs):
         if self.last_command != None:
@@ -147,17 +148,7 @@ class Endeffector(object):
                 self.stop_motion(subs)
                 return True
 
-            if self.command_type == 'global' or self.command_type == 'relative':
-                transformed_vel = self.current_lin_vel
-            else:
-                transformed_vel = rotation * self.command_transform * self.current_lin_vel
-
-            subs[self.input_lin_vel.x] = transformed_vel[0]
-            subs[self.input_lin_vel.y] = transformed_vel[1]
-            subs[self.input_lin_vel.z] = transformed_vel[2]
-            subs[self.input_rot_goal.r] = self.current_rpy[0]
-            subs[self.input_rot_goal.p] = self.current_rpy[1]
-            subs[self.input_rot_goal.y] = self.current_rpy[2]
+            #iframe = self.input_iframe.subs(subs)
             return True
         return False
 
@@ -166,9 +157,9 @@ class Endeffector(object):
         subs[self.input_rot_offset.r] = r
         subs[self.input_rot_offset.p] = p
         subs[self.input_rot_offset.y] = y
-        # subs[self.input_rot_trans.r] = 0
-        # subs[self.input_rot_trans.p] = 0
-        # subs[self.input_rot_trans.y] = 0
+        subs[self.input_iframe.r] = 0
+        subs[self.input_iframe.p] = 0
+        subs[self.input_iframe.y] = 0
         self.current_lin_vel = vector3(0,0,0)
         self.current_rpy = vector3(0,0,0)
         subs[self.input_lin_vel.x]  = 0
@@ -261,5 +252,5 @@ class ControlNode(object):
     def from_dict(cls, init_dict):
         robot = Robot(rospy.get_param('/robot_description'), 0.6)
         base_frame = init_dict['reference_frame']
-        eefs = [Endeffector.from_dict(robot, base_frame, d) for d in init_dict['end_effectors']]
+        eefs = [Endeffector.from_dict(robot, base_frame, d) for d in init_dict['link']]
         return cls(eefs, robot)

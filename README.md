@@ -15,7 +15,14 @@ You need a ROS-enabled robot which can be controlled using joint velocities, a p
   Furthermore, you need the [giskardpy](https://github.com/ARoefer/giskardpy.git) motion control framework and the [rosbridge suite](http://wiki.ros.org/rosbridge_suite).
 
 ### Installation
-Clone this package to a ROS-workspace. If you don't have giskardpy or rosbridge already, install them too. For giskardpy make sure to checkout the **gebsyas** branch.
+Clone this package to a ROS-workspace and update the git submodules:
+```
+git clone https://github.com/ARoefer/smart_eef_control.git
+cd smart_eef_control
+git submodule init
+git submodule update
+```
+If you don't have giskardpy or rosbridge already, install them too. For giskardpy make sure to checkout the **gebsyas** branch.
 
 ### Configuring for your robot
 When the controller starts up, it loads its configuration data from the ROS parameter server. The configuration consists of the robot's URDF, assumed to be saved as *robot_description*, and the link configuration, assumed to be saved as *eef_control*.

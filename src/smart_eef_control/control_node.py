@@ -68,8 +68,8 @@ class Endeffector(object):
         self.input_iframe     = RPYInput.prefix_constructor(symbol_formatter, '{}_iframe'.format(self.link))
         self.input_rot_offset = RPYInput.prefix_constructor(symbol_formatter, '{}_rot_offset'.format(self.link))
 
-        soft_constraints = {'{}_vel_{}'.format(self.link, x): SC(self.input_iframe.get_expression() * self.input_lin_vel.get_expression()[x],
-                                                       self.input_iframe.get_expression() * self.input_lin_vel.get_expression()[x],
+        soft_constraints = {'{}_vel_{}'.format(self.link, x): SC((self.input_iframe.get_expression() * self.input_lin_vel.get_expression())[x],
+                                                       (self.input_iframe.get_expression() * self.input_lin_vel.get_expression())[x],
                                                        1,
                                                        pos_of(self.fk_frame)[x]) for x in range(3)}
 

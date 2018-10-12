@@ -7,18 +7,18 @@ Introduction
 A quick overview over this package.
 
 ### What does it do?
-This package allows you to change your robot's links poses from your phone. 
+This package allows you to change your robot's links poses from your phone.
 
 ### What do I need?
 You need a ROS-enabled robot which can be controlled using joint velocities, a phone and a computer on the robot's and the phone's network.
-  
+
   Furthermore, you need the [giskardpy](https://github.com/ARoefer/giskardpy.git) motion control framework and the [rosbridge suite](http://wiki.ros.org/rosbridge_suite).
- 
+
 ### Installation
 Clone this package to a ROS-workspace. If you don't have giskardpy or rosbridge already, install them too. For giskardpy make sure to checkout the **gebsyas** branch.
 
 ### Configuring for your robot
-When the controller starts up, it loads its configuration data from the ROS parameter server. The configuration consists of the robot's URDF, assumed to be saved as *robot_description*, and the link configuration, assumed to be saved as *eef_control*. 
+When the controller starts up, it loads its configuration data from the ROS parameter server. The configuration consists of the robot's URDF, assumed to be saved as *robot_description*, and the link configuration, assumed to be saved as *eef_control*.
 
 The easiest way to set these parameters is through a YAML-file which is uploaded to the parameter server. An example:
 
@@ -31,7 +31,7 @@ links:
 - link: head_camera_link
   velocity_limit: 0.2
 ```
-The `reference_frame` parameter determines which robot link should be used as origin frame. 
+The `reference_frame` parameter determines which robot link should be used as origin frame.
 The `links` parameter contains a list of links which will be controllable by the controller.
 Every link can specify a limit for its linear velocity. The `symmetry` parameter tells the controller, that the link is symmetrical along a plane. (Right now only *xz* is supported)
 This information is used to remap the controller input so that the effect of the controls remains consistent, independent of the link's orientation. In the case of *xz* this means, that the pitch and yaw responses remain the same, even if the link is upside down.
@@ -39,7 +39,7 @@ This information is used to remap the controller input so that the effect of the
 The controller listens for joint states on the `joint_states` topic and publishes its commands to the `/commands` topic. You might need to remap these to suit your robot.
 
 ### Running the controller
-The package provides a launch file, which runs the rosbridge- and http-servers. It can be started through ROS-launch using 
+The package provides a launch file, which runs the rosbridge- and http-servers. It can be started through ROS-launch using
 ```
 roslaunch smart_eef_control servers.launch
 ```
@@ -65,11 +65,11 @@ The interface has two screens. The main screen which holds the controls and a se
 #### Main Screen
 - The **joystick** moves the link in a plane. It is also the deadman-switch for the controller. As long as the joystick is being held, the controller sends commands.
 - The **axes control** determines in which plane the joystick moves the link.
-- The **control frame** buttons set which frame the planes are relative to.
-  - *Local Motion* sets the planes to be relative to the link itself.
-  - *Global Motion* sets the planes to be relative to the controller's reference frame.
-  - *Relative Motion* sets the planes to be relative to the controller itself. Specifically to its rotation around the Z-axis. (More on that later)
-- The **phone itself** is used for orientation control. The input is always in the link's frame.
+- The **control frame** buttons set which frame the control input is relative to.
+  - *Local Motion* control is relative to the link's frame.
+  - *Global Motion* control is relative to the controller's reference frame.
+  - *Relative Motion* control is relative to the controller itself. Specifically to its rotation around the Z-axis. (More on that later)
+- The **phone itself** is used for orientation control.
 - The **connection status** displays the interface's connection to the ROS bridge server.
 
 #### Settings Screen

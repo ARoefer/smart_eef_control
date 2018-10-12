@@ -59,7 +59,7 @@ class Endeffector(object):
         self.last_command = None
         self.current_rpy  = vector3(0,0,0)
         self.current_lin_vel = vector3(0,0,0)
-        self.global_command  = False 
+        self.global_command  = False
         self.symmetry = symmetry
 
     def generate_constraints(self):
@@ -74,7 +74,7 @@ class Endeffector(object):
                                                        pos_of(self.fk_frame)[x]) for x in range(3)}
 
         self.goal_rotation = self.input_iframe.get_expression() * self.input_rot_goal.get_expression() * self.input_rot_offset.get_expression()
-                             
+
         axis, angle = axis_angle_from_matrix((rot_of(self.fk_frame).T * self.goal_rotation))
         r_rot_control = axis * angle
 
@@ -121,7 +121,7 @@ class Endeffector(object):
                 subs[self.input_iframe.r] = r
                 subs[self.input_iframe.p] = p
                 subs[self.input_iframe.y] = y
-            
+
             r, p, y = rpy_from_matrix(iframe.T * rotation_matrix)
             subs[self.input_rot_offset.r] = r
             subs[self.input_rot_offset.p] = p
@@ -227,12 +227,12 @@ class ControlNode(object):
                     raise Exception('Unknown end effector "{}"'.format(msg.controlled_id))
                 self.current_eef = self.eefs[msg.controlled_id]
 
-            self.current_eef.process_input(self.controller.current_subs, 
-                                           msg.linear_input.x, 
-                                           msg.linear_input.y,  
+            self.current_eef.process_input(self.controller.current_subs,
+                                           msg.linear_input.x,
+                                           msg.linear_input.y,
                                            msg.linear_input.z,
-                                           msg.angular_input.x * deg2rad, 
-                                           msg.angular_input.y * deg2rad, 
+                                           msg.angular_input.x * deg2rad,
+                                           msg.angular_input.y * deg2rad,
                                            msg.angular_input.z * deg2rad,
                                            msg.controller_yaw * deg2rad,
                                            msg.linear_scale,
@@ -252,5 +252,5 @@ class ControlNode(object):
     def from_dict(cls, init_dict):
         robot = Robot(rospy.get_param('/robot_description'), 0.6)
         base_frame = init_dict['reference_frame']
-        eefs = [Endeffector.from_dict(robot, base_frame, d) for d in init_dict['link']]
+        eefs = [Endeffector.from_dict(robot, base_frame, d) for d in init_dict['links']]
         return cls(eefs, robot)

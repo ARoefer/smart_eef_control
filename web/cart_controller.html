@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-<!DOCTYPE html>
 <html>
 <head>
     <title>Cartesian Control</title>
@@ -27,11 +26,11 @@
             <div id="controlMode" class="controlMode">
               <div id="btnXY" class="mode-btn" onclick="selectMode(this.id, 'XY')">XY</div>
               <div id="btnXZ" class="mode-btn" onclick="selectMode(this.id, 'XZ')">XZ</div>
-              <div id="btnYZ" class="mode-btn" onclick="selectMode(this.id, 'YZ')">YZ</div>  
+              <div id="btnYZ" class="mode-btn" onclick="selectMode(this.id, 'YZ')">YZ</div>
             </div>
           </td>
           <td>
-            <div id="joystickArea" class="joystickArea"> 
+            <div id="joystickArea" class="joystickArea">
             </div>
           </td>
         </tr>
@@ -44,7 +43,7 @@
     <div id="btnrelative" class="frame-btn" onclick="selectCoordMode(this.id, 'relative')">Relative Motion</div>
   </div>
 
-  
+
   <div id="statusIndicator">
     <p id="connecting" class="statusDisplay connecting">
       Connecting to rosbridge...
@@ -95,14 +94,14 @@
           <td><label class="switch">
               <input id="ckPos" type="checkbox" onclick="setControlPosition(this.checked)"><span class="checkmark"></span>
               </label>
-          </td> 
+          </td>
         </tr>
         <tr>
           <td><h3>Control Rotation</h3></td>
           <td><label class="switch">
               <input id="ckRot" type="checkbox" onclick="setControlRotation(this.checked)"><span class="checkmark"></span>
               </label>
-          </td> 
+          </td>
         </tr>
         <tr id="calibrationRow">
           <td><h3>Localization</h3></td>

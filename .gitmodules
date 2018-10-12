@@ -1,0 +1,3 @@
+[submodule "web/nipplejs"]
+	path = web/nipplejs
+	url = https://github.com/yoannmoinet/nipplejs.git

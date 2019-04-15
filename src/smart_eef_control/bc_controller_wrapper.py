@@ -1,12 +1,7 @@
-import rospy
 import os
 
 from giskardpy import print_wrapper
 from giskardpy.symengine_controller import SymEngineController
-from giskardpy.qp_problem_builder import JointConstraint
-from giskardpy.qp_problem_builder import SoftConstraint as SC
-from giskardpy.god_map import GodMap
-from giskardpy.symengine_wrappers import Symbol
 
 def res_pkg_path(rpath):
     """Resolves a ROS package relative path to a global path.

@@ -1,25 +1,18 @@
 import rospy
-import numpy as np
 import symengine as sp
 import math
 
 from control_msgs.msg import GripperCommandActionGoal as GCAGMsg
 
 from giskardpy.symengine_robot import Robot
-from giskardpy.symengine_controller import SymEngineController
-from giskardpy.symengine_wrappers import pos_of, rot_of, axis_angle_from_matrix, rotation3_axis_angle, rpy_from_matrix, vector3, eye, diag, rotation3_rpy
+from giskardpy.symengine_wrappers import pos_of, rot_of, axis_angle_from_matrix, rotation3_axis_angle, rpy_from_matrix, vector3, eye, rotation3_rpy
 from giskardpy.input_system import Vector3Input, RPYInput
 from giskardpy.qp_problem_builder import SoftConstraint as SC
 
 from smart_eef_control.msg import RemoteControl as RemoteControlMsg
-from smart_eef_control.msg import DeviceMotion  as DeviceMotionMsg
 from smart_eef_control.srv import *
 from smart_eef_control.bc_controller_wrapper import BCControllerWrapper
 from sensor_msgs.msg import JointState as JointStateMsg
-from geometry_msgs.msg import Vector3Stamped as Vector3SMsg
-from geometry_msgs.msg import Point as PointMsg
-from geometry_msgs.msg import PoseStamped as PoseStampedMsg
-from visualization_msgs.msg import Marker as MarkerMsg
 
 rad2deg = 57.2957795131
 deg2rad = 1.0 / rad2deg
@@ -100,9 +93,8 @@ class Endeffector(object):
     def process_input(self, subs, lx, ly, lz, ax, ay, az, oy, scale=1.0, command_type='global'):
         now = rospy.Time.now()
 
-        if self.last_command == None:
+        if self.last_command is None:
             rotation_matrix = self.fk_frame.subs(subs)
-            r, p, y = rpy_from_matrix(rotation_matrix)
             if command_type == 'relative':
                 iframe = rotation3_rpy(0,0, oy)
                 subs[self.input_iframe.r] = 0
@@ -142,7 +134,6 @@ class Endeffector(object):
         if self.last_command != None:
             now = rospy.Time.now()
             deltaT = (now - self.last_command).to_sec()
-            rotation = self.fk_frame.subs(subs)
             if deltaT > 0.1:
                 self.last_command = None
                 self.stop_motion(subs)

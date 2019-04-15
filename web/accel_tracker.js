@@ -24,7 +24,7 @@ var controller_yaw = 0.0;
 // EEF settings
 var coordMode = true;
 var controlMode = 'XY';
-var deadzone = 0.2
+var deadzone = 0.2;
 var sensitivity = 1.0;
 var controlPosition = true;
 var controlRotation = true;
@@ -72,12 +72,12 @@ $(function() {
 
   njs_manager.on('move', function(event, data) {
     if (data.force <= 0.1) {
-      x = 0.0;
-      y = 0.0;
+      var x = 0.0;
+      var y = 0.0;
     } else {
-      s = (Math.min(1.0, data.force) - deadzone) / (1.0 - deadzone);
-      x = Math.cos(data.angle.radian) * s;
-      y = Math.sin(data.angle.radian) * s;
+      var s = (Math.min(1.0, data.force) - deadzone) / (1.0 - deadzone);
+      var x = Math.cos(data.angle.radian) * s;
+      var y = Math.sin(data.angle.radian) * s;
     }
 
     if (controlMode == 'XY') {
@@ -154,7 +154,7 @@ ros.on('connection', function() {
     var list = document.getElementById('eefList');
     if (res.endeffectors.length > 1) {
       $('.eefRelated').show();
-      for (x in res.endeffectors) {
+      for (var x in res.endeffectors) {
         list.add(new Option(res.endeffectors[x], res.endeffectors[x], false, false));
         if (res.endeffectors[x] == eef_to_select)
           sel_index = x;

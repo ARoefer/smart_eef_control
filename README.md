@@ -1,4 +1,6 @@
 [![Total alerts](https://img.shields.io/lgtm/alerts/g/ARoefer/smart_eef_control.svg?style=flat-square&logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/ARoefer/smart_eef_control/alerts/)
+[![Language grade: JavaScript](https://img.shields.io/lgtm/grade/javascript/g/ARoefer/smart_eef_control.svg?style=flat-square&logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/ARoefer/smart_eef_control/context:javascript)
+[![Language grade: Python](https://img.shields.io/lgtm/grade/python/g/ARoefer/smart_eef_control.svg?style=flat-square&logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/ARoefer/smart_eef_control/context:python)
 
 smart_eef_control
 =================

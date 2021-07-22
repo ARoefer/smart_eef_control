@@ -1,76 +1,37 @@
 import os
 
-from giskardpy import print_wrapper
-from giskardpy.symengine_controller import SymEngineController
+import kineverse.gradients.gradient_math as gm
+from kineverse.model.geometry_model       import GeometryModel
+from kineverse.motion.min_qp_builder      import MinimalQPBuilder, \
+                                                 generate_controlled_values, \
+                                                 depth_weight_controlled_values
 
-def res_pkg_path(rpath):
-    """Resolves a ROS package relative path to a global path.
-    :param rpath: Potential ROS URI to resolve.
-    :type rpath: str
-    :return: Local file system path
-    :rtype: str
-    """
-    if rpath[:10] == 'package://':
-        paths = os.environ['ROS_PACKAGE_PATH'].split(':')
+class BCControllerWrapper(object):
+    def __init__(self, km, robot_path, soft_constraints):
+        robot = km.get_data(robot_path)
+        robot_joints = {j.position for j in robot.joints.values() if hasattr(j, 'position')}
+        relevant_symbols   = robot_joints.intersection(sum([list(gm.free_symbols(c.expr)) for c in soft_constraints.values()], []))
+        controlled_symbols = {gm.DiffSymbol(s) for s in relevant_symbols}
 
-        rpath = rpath[10:]
-        pkg = rpath[:rpath.find('/')]
+        constraints = km.get_constraints_by_symbols(relevant_symbols.union(controlled_symbols))
+        controlled_values, constraints = generate_controlled_values(constraints, controlled_symbols)
 
-        for rpp in paths:
-            if rpp[rpp.rfind('/') + 1:] == pkg:
-                return '{}/{}'.format(rpp[:rpp.rfind('/')], rpath)
-            if os.path.isdir('{}/{}'.format(rpp, pkg)):
-                return '{}/{}'.format(rpp, rpath)
-        raise Exception('Package "{}" can not be found in ROS_PACKAGE_PATH!'.format(pkg))
-    return rpath
+        if isinstance(km, GeometryModel):
+            controlled_values = depth_weight_controlled_values(km, controlled_values, exp_factor=1.02)
 
-
-class BCControllerWrapper(SymEngineController):
-    def __init__(self, robot, print_fn=print_wrapper):
-        self.path_to_functions = res_pkg_path('package://smart_eef_control/.controllers/')
-        self.controlled_joints = []
-        self.hard_constraints = {}
-        self.joint_constraints = {}
-        self.qp_problem_builder = None
-        self.robot = robot
-        self.current_subs = {}
-        self.print_fn = print_fn
-
-    def init(self, soft_constraints):
-        free_symbols = set()
-        for sc in soft_constraints.values():
-            for f in sc:
-                if hasattr(f, 'free_symbols'):
-                    free_symbols = free_symbols.union(f.free_symbols)
-        super(BCControllerWrapper, self).set_controlled_joints([j for j in self.robot.get_joint_names() if self.robot.joint_states_input.joint_map[j] in free_symbols])
-        if hasattr(self.robot, 'soft_dynamics_constraints'):
-            for k, c in self.robot.soft_dynamics_constraints.items():
-                if len(c.expression.free_symbols.intersection(free_symbols)) > 0:
-                    soft_constraints[k] = c
-                    for f in c:
-                        if hasattr(f, 'free_symbols'):
-                            free_symbols = free_symbols.union(f.free_symbols)
-
-        for jc in self.joint_constraints.values():
-            for f in jc:
-                if hasattr(f, 'free_symbols'):
-                    free_symbols = free_symbols.union(f.free_symbols)
-        for hc in self.hard_constraints.values():
-            for f in hc:
-                if hasattr(f, 'free_symbols'):
-                    free_symbols = free_symbols.union(f.free_symbols)
-        #print('  \n'.join([str(s) for s in free_symbols]))
-        self.free_symbols = free_symbols
-
-        super(BCControllerWrapper, self).init(soft_constraints, free_symbols, self.print_fn)
+        self.qpb = MinimalQPBuilder(constraints, soft_constraints, controlled_values)
+        
+        self.joint_mapping = {jn: j.position for jn, j in robot.joints.items() if hasattr(j, 'position')}
+        self.cmd_mapping   = {gm.DiffSymbol(jp): jn for jn, jp in self.joint_mapping.items()}
+        self.current_subs  = {}
 
     def set_robot_js(self, js):
         for j, s in js.items():
-            if j in self.robot.joint_states_input.joint_map:
-                self.current_subs[self.robot.joint_states_input.joint_map[j]] = s
+            if j in self.joint_mapping:
+                self.current_subs[self.joint_mapping[j]] = s
 
     def get_cmd(self, nWSR=None):
-        return super(BCControllerWrapper, self).get_cmd({str(s): p for s, p in self.current_subs.items()}, nWSR)
+        return self.qpb.get_cmd(self.current_subs, nWSR)
 
-    def stop(self):
-        pass
+    def num_joints(self):
+        return len(self.cmd_mapping)

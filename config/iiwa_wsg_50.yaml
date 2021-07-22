@@ -1,0 +1,4 @@
+reference_frame: base_link
+links:
+- link: wsg_50_tool_frame
+  velocity_limit: 0.6

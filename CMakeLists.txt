@@ -9,7 +9,7 @@ project(smart_eef_control)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
-  giskardpy
+  kineverse
   rospy
   std_msgs
   message_generation

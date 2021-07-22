@@ -1,37 +1,29 @@
 import rospy
-import symengine as sp
 import math
+
+from collections import namedtuple
 
 from control_msgs.msg import GripperCommandActionGoal as GCAGMsg
 
-from giskardpy.symengine_robot import Robot
-from giskardpy.symengine_wrappers import pos_of, rot_of, axis_angle_from_matrix, rotation3_axis_angle, rpy_from_matrix, vector3, eye, rotation3_rpy
-from giskardpy.input_system import Vector3Input, RPYInput
-from giskardpy.qp_problem_builder import SoftConstraint as SC
+import kineverse.gradients.gradient_math as gm
+from kineverse.model.paths                import Path
+from kineverse.model.geometry_model       import GeometryModel
+from kineverse.operations.urdf_operations import load_urdf
+from kineverse.urdf_fix                   import hacky_urdf_parser_fix, urdf_filler
+from kineverse.motion.min_qp_builder      import SoftConstraint as SC
 
 from smart_eef_control.msg import RemoteControl as RemoteControlMsg
 from smart_eef_control.srv import *
 from smart_eef_control.bc_controller_wrapper import BCControllerWrapper
 from sensor_msgs.msg import JointState as JointStateMsg
 
+from urdf_parser_py.urdf import URDF
+
+SymbolVector3  = namedtuple('SymbolVector3', ['vec'] + list('xyz'))
+SymbolPose3RPY = namedtuple('SymbolPose3RPY', ['pose'] + list('xyz') + [f'r{x}' for x in 'rpy'])
+
 rad2deg = 57.2957795131
 deg2rad = 1.0 / rad2deg
-
-def symbol_formatter(symbol_name):
-    if '__' in symbol_name:
-        raise Exception('Illegal character sequence in symbol name "{}"! Double underscore "__" is a separator sequence.'.format(symbol_name))
-    return sp.Symbol(symbol_name.replace('/', '__'))
-
-
-# def rotation3_rpy(r, p, y):
-#     """ Conversion of roll, pitch, yaw to 4x4 rotation matrix according to:
-#         https://github.com/orocos/orocos_kinematics_dynamics/blob/master/orocos_kdl/src/frames.cpp#L167
-#     """
-#     # TODO don't split this into 3 matrices
-
-#     return np.array([[np.cos(p)*np.cos(y), -np.sin(y)*np.cos(r) + np.sin(p)*np.sin(r)*np.cos(y), np.sin(r)*np.sin(y) + np.sin(p)*np.cos(r)*np.cos(y)],
-#             [np.sin(y)*np.cos(p), np.cos(r)*np.cos(y) + np.sin(p)*np.sin(r)*np.sin(y), -np.sin(r)*np.cos(y) + np.sin(p)*np.sin(y)*np.cos(r)],
-#             [-np.sin(p), np.sin(r)*np.cos(p), np.cos(r)*np.cos(p)]])
 
 def rpy_from_matrix(matrix):
     sy = math.sqrt(matrix[0, 0] * matrix[0, 0] + matrix[1, 0] * matrix[1, 0])
@@ -42,73 +34,88 @@ def rpy_from_matrix(matrix):
 
     return r, p, y
 
+def create_symbol_vec3(prefix):
+    if not isinstance(prefix, Path):
+        prefix = Path(prefix)
+    
+    symbols = [p.to_symbol() for p in [prefix + (x,) for x in 'xyz']]
+    return SymbolVector3(gm.vector3(*symbols), *symbols)
+
+def create_symbol_frame3_rpy(prefix):
+    if not isinstance(prefix, Path):
+        prefix = Path(prefix)
+    
+    symbols = [p.to_symbol() for p in ([prefix + (x,) for x in 'xyz'] + [prefix + (f'r{r}',) for r in 'rpy'])]
+    return SymbolPose3RPY(gm.frame3_rpy(*symbols[-3:], gm.point3(*symbols[:3])), *symbols)
+
 
 class Endeffector(object):
-    def __init__(self, robot, link, reference_frame, vel_limit=0.6, symmetry=None, gripper_topic=None):
-        self.link = link
-        self.fk_frame = robot.get_fk_expression(reference_frame, link)
+    def __init__(self, robot, link, vel_limit=0.6, symmetry=None, gripper_topic=None):
+        self.link      = link
+        self.fk_frame  = robot.links[link].pose
         self.vel_limit = vel_limit
-        self.pub_gcmd = rospy.Publisher(gripper_topic, GCAGMsg, queue_size=1, tcp_nodelay=True) if gripper_topic != None else None
+        self.pub_gcmd  = rospy.Publisher(gripper_topic, GCAGMsg, queue_size=1, tcp_nodelay=True) if gripper_topic != None else None
         self.last_command = None
-        self.current_rpy  = vector3(0,0,0)
-        self.current_lin_vel = vector3(0,0,0)
+        self.current_rpy  = gm.vector3(0,0,0)
+        self.current_lin_vel = gm.vector3(0,0,0)
         self.global_command  = False
         self.symmetry = symmetry
 
+        self.input_lin_vel  = create_symbol_vec3(f'{self.link}_lin_vel')
+        self.input_rot_goal = create_symbol_frame3_rpy(f'{self.link}_rot_goal')
+        self.input_iframe   = create_symbol_frame3_rpy(f'{self.link}_iframe')
+        self.input_rot_offset = create_symbol_frame3_rpy(f'{self.link}_rot_offset')
+
+
     def generate_constraints(self):
-        self.input_lin_vel    = Vector3Input.prefix(symbol_formatter, '{}_lin_vel'.format(self.link))
-        self.input_rot_goal   = RPYInput.prefix_constructor(symbol_formatter, '{}_rot_goal'.format(self.link))
-        self.input_iframe     = RPYInput.prefix_constructor(symbol_formatter, '{}_iframe'.format(self.link))
-        self.input_rot_offset = RPYInput.prefix_constructor(symbol_formatter, '{}_rot_offset'.format(self.link))
-
-        soft_constraints = {'{}_vel_{}'.format(self.link, x): SC((self.input_iframe.get_expression() * self.input_lin_vel.get_expression())[x],
-                                                       (self.input_iframe.get_expression() * self.input_lin_vel.get_expression())[x],
+        soft_constraints = {f'{self.link}_vel_{x}': SC((gm.dot(self.input_iframe.pose, self.input_lin_vel.vec))[x],
+                                                       (gm.dot(self.input_iframe.pose, self.input_lin_vel.vec))[x],
                                                        1,
-                                                       pos_of(self.fk_frame)[x]) for x in range(3)}
+                                                       gm.pos_of(self.fk_frame)[x]) for x in range(3)}
 
-        self.goal_rotation = self.input_iframe.get_expression() * self.input_rot_goal.get_expression() * self.input_rot_offset.get_expression()
+        self.goal_rotation = gm.dot(self.input_iframe.pose, self.input_rot_goal.pose, self.input_rot_offset.pose)
 
-        axis, angle = axis_angle_from_matrix((rot_of(self.fk_frame).T * self.goal_rotation))
+        axis, angle = gm.axis_angle_from_matrix(gm.dot(gm.rot_of(self.fk_frame).T, self.goal_rotation))
         r_rot_control = axis * angle
 
-        hack = rotation3_axis_angle([0, 0, 1], 0.0001)
+        hack = gm.rotation3_axis_angle([0, 0, 1], 0.0001)
 
-        axis, angle = axis_angle_from_matrix(rot_of(self.fk_frame) * hack)
+        axis, angle = gm.axis_angle_from_matrix(gm.dot(gm.rot_of(self.fk_frame), hack))
         c_aa = (axis * angle)
 
-        soft_constraints['{} align rotation 0'.format(self.link)] = SC(lower=r_rot_control[0],
+        soft_constraints[f'{self.link} align rotation 0'] = SC(lower=r_rot_control[0],
                                                   upper=r_rot_control[0],
                                                   weight=1,
-                                                  expression=c_aa[0])
-        soft_constraints['{} align rotation 1'.format(self.link)] = SC(lower=r_rot_control[1],
+                                                  expr=c_aa[0])
+        soft_constraints[f'{self.link} align rotation 1'] = SC(lower=r_rot_control[1],
                                                   upper=r_rot_control[1],
                                                   weight=1,
-                                                  expression=c_aa[1])
-        soft_constraints['{} align rotation 2'.format(self.link)] = SC(lower=r_rot_control[2],
+                                                  expr=c_aa[1])
+        soft_constraints[f'{self.link} align rotation 2'] = SC(lower=r_rot_control[2],
                                                   upper=r_rot_control[2],
                                                   weight=1,
-                                                  expression=c_aa[2])
+                                                  expr=c_aa[2])
         return soft_constraints
 
     def process_input(self, subs, lx, ly, lz, ax, ay, az, oy, scale=1.0, command_type='global'):
         now = rospy.Time.now()
 
         if self.last_command is None:
-            rotation_matrix = self.fk_frame.subs(subs)
+            rotation_matrix = gm.subs(self.fk_frame, subs)
             if command_type == 'relative':
-                iframe = rotation3_rpy(0,0, oy)
+                iframe = gm.rotation3_rpy(0,0, oy)
                 subs[self.input_iframe.r] = 0
                 subs[self.input_iframe.p] = 0
                 subs[self.input_iframe.y] = oy
             elif command_type == 'global':
-                iframe = eye(4)
+                iframe = gm.eye(4)
                 subs[self.input_iframe.r] = 0
                 subs[self.input_iframe.p] = 0
                 subs[self.input_iframe.y] = 0
             else:
                 iframe = rotation_matrix
                 if self.symmetry == 'xz' and rotation_matrix[2,2] < 0:
-                    iframe = rotation3_rpy(math.pi, 0, 0) * iframe
+                    iframe = gm.rotation3_rpy(math.pi, 0, 0) * iframe
                 r, p, y = rpy_from_matrix(iframe)
                 subs[self.input_iframe.r] = r
                 subs[self.input_iframe.p] = p
@@ -121,8 +128,8 @@ class Endeffector(object):
 
         self.last_command    = now
         self.command_type    = command_type
-        self.current_rpy     = vector3(ax, ay, az)
-        self.current_lin_vel = vector3(lx, ly,  lz) * self.vel_limit * scale
+        self.current_rpy     = gm.vector3(ax, ay, az)
+        self.current_lin_vel = gm.vector3(lx, ly,  lz) * self.vel_limit * scale
         subs[self.input_lin_vel.x] = self.current_lin_vel[0]
         subs[self.input_lin_vel.y] = self.current_lin_vel[1]
         subs[self.input_lin_vel.z] = self.current_lin_vel[2]
@@ -144,15 +151,15 @@ class Endeffector(object):
         return False
 
     def stop_motion(self, subs):
-        r, p, y = rpy_from_matrix(self.fk_frame.subs(subs))
+        r, p, y = rpy_from_matrix(gm.subs(self.fk_frame, subs))
         subs[self.input_rot_offset.r] = r
         subs[self.input_rot_offset.p] = p
         subs[self.input_rot_offset.y] = y
         subs[self.input_iframe.r] = 0
         subs[self.input_iframe.p] = 0
         subs[self.input_iframe.y] = 0
-        self.current_lin_vel = vector3(0,0,0)
-        self.current_rpy = vector3(0,0,0)
+        self.current_lin_vel = gm.vector3(0,0,0)
+        self.current_rpy = gm.vector3(0,0,0)
         subs[self.input_lin_vel.x]  = 0
         subs[self.input_lin_vel.y]  = 0
         subs[self.input_lin_vel.z]  = 0
@@ -162,22 +169,22 @@ class Endeffector(object):
 
     @classmethod
     def from_dict(cls, robot, base_frame, init_dict):
-        link = init_dict['link']
-        vel_limit = init_dict['velocity_limit'] if 'velocity_limit' in init_dict else 0.6
+        link          = init_dict['link']
+        vel_limit     = init_dict['velocity_limit'] if 'velocity_limit' in init_dict else 0.6
         gripper_topic = init_dict['gripper_topic'] if 'gripper_topic' in init_dict else None
-        symmetry = init_dict['symmetry'] if 'symmetry' in init_dict else None
-        return cls(robot, link, base_frame, vel_limit, symmetry, gripper_topic)
+        symmetry      = init_dict['symmetry'] if 'symmetry' in init_dict else None
+        return cls(robot, link, vel_limit, symmetry, gripper_topic)
 
 
 class ControlNode(object):
-    def __init__(self, eefs, robot):
-        self.robot = robot
-        self.controller = BCControllerWrapper(self.robot)
+    def __init__(self, km, robot_path, eefs):
+        self.km = km
         self.pub_cmd = rospy.Publisher('commands', JointStateMsg, queue_size=1, tcp_nodelay=True)
+        self.robot_name = str(robot_path)
 
         self.eefs = {e.link: e for e in eefs}
         self.global_command = False
-        self.current_eef = self.eefs.values()[0]
+        self.current_eef = next(iter(self.eefs.values()))
         self.initialized = False
 
         self.services = [rospy.Service('get_endeffectors', GetEndeffectors, self.srv_get_endeffectors)]
@@ -186,13 +193,15 @@ class ControlNode(object):
         for e in self.eefs.values():
             soft_constraints.update(e.generate_constraints())
 
-        self.controller.init(soft_constraints)
+        self.controller = BCControllerWrapper(km, robot_path, soft_constraints)
 
         self.sub_dm = rospy.Subscriber('/remote_control', RemoteControlMsg, self.cb_device_motion, queue_size=1)
         self.sub_js = rospy.Subscriber('joint_states', JointStateMsg, self.cb_joint_state, queue_size=1)
 
+        self.cmd_msg = JointStateMsg()
+
     def cb_joint_state(self, msg):
-        self.controller.set_robot_js({msg.name[x]: msg.position[x] for x in range(len(msg.name))})
+        self.controller.set_robot_js(dict(zip(msg.name, msg.position)))
 
         if not self.initialized:
             for e in self.eefs.values():
@@ -201,13 +210,12 @@ class ControlNode(object):
 
         if self.current_eef.update_subs(self.controller.current_subs):
             cmd = self.controller.get_cmd()
-            cmd_msg = JointStateMsg()
-            cmd_msg.header.stamp = rospy.Time.now()
-            cmd_msg.effort = [0] * len(cmd.items())
-            cmd_msg.position = [0] * len(cmd.items())
-            for j, v in cmd.items():
-                cmd_msg.name.append(j)
-                cmd_msg.velocity.append(v)
+            self.cmd_msg.header.stamp = rospy.Time.now()
+            self.cmd_msg.effort = [0] * len(cmd)
+            self.cmd_msg.position = [0] * len(cmd)
+            
+            self.cmd_msg.name, self.cmd_msg.velocity = list(zip(*cmd.items()))
+
             self.pub_cmd.publish(cmd_msg)
 
     def cb_device_motion(self, msg):
@@ -235,13 +243,19 @@ class ControlNode(object):
 
     def srv_get_endeffectors(self, req):
         res = GetEndeffectorsResponse()
-        res.robot = self.robot._urdf_robot.name
+        res.robot = self.robot_name
         res.endeffectors = self.eefs.keys()
         return res
 
     @classmethod
     def from_dict(cls, init_dict):
-        robot = Robot(rospy.get_param('/robot_description'), 0.6)
+        km = GeometryModel()
+        
+        urdf = urdf_filler(URDF.from_xml_string(rospy.get_param('/robot_description')))
+
+        load_urdf(km, Path(urdf.name), urdf)
+        km.clean_structure()
+        km.dispatch_events()
         base_frame = init_dict['reference_frame']
-        eefs = [Endeffector.from_dict(robot, base_frame, d) for d in init_dict['links']]
-        return cls(eefs, robot)
+        eefs = [Endeffector.from_dict(km.get_data(Path(urdf.name)), base_frame, d) for d in init_dict['links']]
+        return cls(km, Path(urdf.name), eefs)

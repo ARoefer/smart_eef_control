@@ -1,6 +1,11 @@
-const express = require('express')
-const app = express()
-const port = 8000
+const express = require('express');
+const app = express();
+
+var port = 8000;
+
+if (process.argv.length > 2) {
+  port = Number(process.argv[2]);
+}
 
 app.get('/', (req, res) => {
     res.sendFile(`${__dirname}/static/cart_controller.html`)

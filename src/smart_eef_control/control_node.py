@@ -104,27 +104,27 @@ class Endeffector(object):
             rotation_matrix = gm.subs(self.fk_frame, subs)
             if command_type == 'relative':
                 iframe = gm.rotation3_rpy(0,0, oy)
-                subs[self.input_iframe.r] = 0
-                subs[self.input_iframe.p] = 0
-                subs[self.input_iframe.y] = oy
+                subs[self.input_iframe.rr] = 0
+                subs[self.input_iframe.rp] = 0
+                subs[self.input_iframe.ry] = oy
             elif command_type == 'global':
                 iframe = gm.eye(4)
-                subs[self.input_iframe.r] = 0
-                subs[self.input_iframe.p] = 0
-                subs[self.input_iframe.y] = 0
+                subs[self.input_iframe.rr] = 0
+                subs[self.input_iframe.rp] = 0
+                subs[self.input_iframe.ry] = 0
             else:
                 iframe = rotation_matrix
                 if self.symmetry == 'xz' and rotation_matrix[2,2] < 0:
                     iframe = gm.rotation3_rpy(math.pi, 0, 0) * iframe
                 r, p, y = rpy_from_matrix(iframe)
-                subs[self.input_iframe.r] = r
-                subs[self.input_iframe.p] = p
-                subs[self.input_iframe.y] = y
+                subs[self.input_iframe.rr] = r
+                subs[self.input_iframe.rp] = p
+                subs[self.input_iframe.ry] = y
 
             r, p, y = rpy_from_matrix(iframe.T * rotation_matrix)
-            subs[self.input_rot_offset.r] = r
-            subs[self.input_rot_offset.p] = p
-            subs[self.input_rot_offset.y] = y
+            subs[self.input_rot_offset.rr] = r
+            subs[self.input_rot_offset.rp] = p
+            subs[self.input_rot_offset.ry] = y
 
         self.last_command    = now
         self.command_type    = command_type
@@ -133,9 +133,9 @@ class Endeffector(object):
         subs[self.input_lin_vel.x] = self.current_lin_vel[0]
         subs[self.input_lin_vel.y] = self.current_lin_vel[1]
         subs[self.input_lin_vel.z] = self.current_lin_vel[2]
-        subs[self.input_rot_goal.r] = self.current_rpy[0]
-        subs[self.input_rot_goal.p] = self.current_rpy[1]
-        subs[self.input_rot_goal.y] = self.current_rpy[2]
+        subs[self.input_rot_goal.rr] = self.current_rpy[0]
+        subs[self.input_rot_goal.rp] = self.current_rpy[1]
+        subs[self.input_rot_goal.ry] = self.current_rpy[2]
 
     def update_subs(self, subs):
         if self.last_command != None:
@@ -152,20 +152,20 @@ class Endeffector(object):
 
     def stop_motion(self, subs):
         r, p, y = rpy_from_matrix(gm.subs(self.fk_frame, subs))
-        subs[self.input_rot_offset.r] = r
-        subs[self.input_rot_offset.p] = p
-        subs[self.input_rot_offset.y] = y
-        subs[self.input_iframe.r] = 0
-        subs[self.input_iframe.p] = 0
-        subs[self.input_iframe.y] = 0
+        subs[self.input_rot_offset.rr] = r
+        subs[self.input_rot_offset.rp] = p
+        subs[self.input_rot_offset.ry] = y
+        subs[self.input_iframe.rr] = 0
+        subs[self.input_iframe.rp] = 0
+        subs[self.input_iframe.ry] = 0
         self.current_lin_vel = gm.vector3(0,0,0)
         self.current_rpy = gm.vector3(0,0,0)
         subs[self.input_lin_vel.x]  = 0
         subs[self.input_lin_vel.y]  = 0
         subs[self.input_lin_vel.z]  = 0
-        subs[self.input_rot_goal.r] = self.current_rpy[0]
-        subs[self.input_rot_goal.p] = self.current_rpy[1]
-        subs[self.input_rot_goal.y] = self.current_rpy[2]
+        subs[self.input_rot_goal.rr] = self.current_rpy[0]
+        subs[self.input_rot_goal.rp] = self.current_rpy[1]
+        subs[self.input_rot_goal.ry] = self.current_rpy[2]
 
     @classmethod
     def from_dict(cls, robot, base_frame, init_dict):
@@ -216,7 +216,7 @@ class ControlNode(object):
             
             self.cmd_msg.name, self.cmd_msg.velocity = list(zip(*cmd.items()))
 
-            self.pub_cmd.publish(cmd_msg)
+            self.pub_cmd.publish(self.cmd_msg)
 
     def cb_device_motion(self, msg):
         if self.initialized:

@@ -31,7 +31,7 @@ class BCControllerWrapper(object):
                 self.current_subs[self.joint_mapping[j]] = s
 
     def get_cmd(self, nWSR=None):
-        return self.qpb.get_cmd(self.current_subs, nWSR)
+        return {self.cmd_mapping[c] : v for c, v in self.qpb.get_cmd(self.current_subs, nWSR).items()}
 
     def num_joints(self):
         return len(self.cmd_mapping)

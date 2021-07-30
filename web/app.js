@@ -11,8 +11,10 @@ app.get('/', (req, res) => {
     res.sendFile(`${__dirname}/static/cart_controller.html`)
 });
 
-app.use('/static', express.static('static'));
+app.use('/static',   express.static('static'));
 app.use('/nipplejs', express.static('node_modules/nipplejs/dist/'));
+app.use('/roslib',   express.static('node_modules/roslib/build/'));
+app.use('/jquery',   express.static('node_modules/jquery/dist/'));
 
 app.listen(port, () => {
   console.log(`Express app listening at http://localhost:${port}`)
